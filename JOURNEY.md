@@ -21,7 +21,15 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
-		s, _ := reader.ReadString('\n')
+		s, err := reader.ReadByte()
+
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: Reading key from stdin: %s\n", err)
+			os.Exit(1)
+		}
+
 		fmt.Println("Pressed: ", s)
 	}
 }
@@ -31,13 +39,15 @@ func main() {
 
 ```sh
 a
-Pressed:  a
-
-d
-Pressed:  d
-
-qr
-Pressed:  qr
+Pressed:  97
+Pressed:  10
+g
+Pressed:  103
+Pressed:  10
+sf
+Pressed:  115
+Pressed:  102
+Pressed:  10
 
 ^Csignal: interrupt
 ```
@@ -51,9 +61,16 @@ To implement this feature, all we have to do is check if the captured string (s)
 
 ```go
   for {
-		s, _ := reader.ReadString('\n')
-		s = strings.TrimSpace(s)
-		if s == "q" {
+		s, err := reader.ReadByte()
+
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: Reading key from stdin: %s\n", err)
+			os.Exit(1)
+		}
+
+		if s == 'q' {
 			break
 		}
 		fmt.Println("Pressed: ", s)
@@ -63,10 +80,149 @@ To implement this feature, all we have to do is check if the captured string (s)
 **Output:**
 
 ```sh
-b
-Pressed:  b
-da
-Pressed:  da
+l
+Pressed:  108
+Pressed:  10
+t
+Pressed:  116
+Pressed:  10
 q
 (...exited...)
+```
+
+## Disable ECHO
+
+The ECHO flag enables terminal to display the characters typed in output. We can disable this with the following function:
+
+```go
+func rawMode() (func(), error) {
+	raw, err := unix.IoctlGetTermios(unix.Stdin, unix.TCGETS)
+	if err != nil {
+		return nil, fmt.Errorf("rawMode: error getting terminal flags: %w", err)
+	}
+
+	copy := raw
+	raw.Lflag &^= unix.ECHO
+
+	if err = unix.IoctlSetTermios(unix.Stdin, unix.TCSETS, raw); err != nil {
+		return nil, fmt.Errorf("rawMode: error setting terminal flags: %w", err)
+	}
+
+	return func() {
+		if err := unix.IoctlSetTermios(unix.Stdin, unix.TCSETS, copy); err != nil {
+			fmt.Fprintf(os.Stderr, "disableRawMode: error restoring original terminal flags: %s", err)
+		}
+	}, nil
+}
+```
+
+This function gets the attributes of terminal, sets the `c_lflag`/`Lflag` to remove the `ECHO` flag, and then sets the new set of flags as the attributes.
+This function returns a function and an error. The returned function can be called to reset the terminal attributes to the original set, thus restoring the attributes.
+
+This function is used in the main function as follows:
+
+```go
+func main() {
+	disableRawMode, err := rawMode()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "main: error setting terminal to raw mode")
+		os.Exit(1)
+	}
+	reader := bufio.NewReader(os.Stdin)
+
+	for {
+		s, err := reader.ReadByte()
+		...
+	}
+	disableRawMode()
+}
+```
+
+**Output:**
+
+```sh
+Pressed:  97
+Pressed:  10
+Pressed:  103
+Pressed:  10
+Pressed:  114
+Pressed:  10
+```
+
+## Disabling Canonical Mode
+
+Now its time to disable canonical mode. In this mode, every character we input needs to be passed with a line delimiter (like `\n`) to be sent to the program's read() loop (here, bufio's reader). In non-canonical mode, this delimiter is no longer required, and keypresses register instantly.
+
+To disable canonical mode, we need to disable the ICANON flag along with ECHO:
+
+```go
+func rawMode() (func(), error) {
+	...
+
+	raw.Lflag &^= unix.ECHO | unix.ICANON
+
+	...
+}
+```
+
+## Disabling signals
+
+Another `c_lflag`/`Lflag` is `ISIG`, which converts characters like `Ctrl-C`/`Ctrl-Z` into corresponding signals like `INTR`, `QUIT`, `SUSP`, or `DSUSP`. We can disable this in a similar manner:
+
+```go
+func rawMode() (func(), error) {
+	...
+
+	raw.Lflag &^= unix.ECHO | unix.ICANON | unix.ISIG
+
+	...
+}
+```
+
+## Disabling `Ctrl-S` and `Ctrl-Q`
+
+By default, these keys are used for software flow control. `Ctrl-S` stops data from being transmitted to the terminal until `Ctrl-Q` is pressed.
+We can turn off this feature by disabling the flag `IXON`, which is an input flag (`c_iflag`/`Iflag`).
+
+```go
+func rawMode() (func(), error) {
+	...
+
+	raw.Iflag &^= unix.IXON
+	raw.Lflag &^= unix.ECHO | unix.ICANON | unix.ISIG
+
+	...
+}
+```
+
+## Disabling `Ctrl-V`
+
+`Ctrl-V` makes the terminal wait for another character to be typed that it sends literally. For example, before we disabled `Ctrl-C`, typing `Ctrl-V` then `Ctrl-C` would have sent the byte `3` literally instead of sending an interrupt signal.
+This can be disabled via the `IEXTEN` flag, which is another `Lflag`.
+
+```go
+func rawMode() (func(), error) {
+	...
+
+	raw.Lflag &^= unix.ECHO | unix.ICANON | unix.ISIG | unix.IEXTEN
+
+	...
+}
+```
+
+## Fixing `Ctrl-M`
+
+If you run the program now and go through the whole alphabet while holding down Ctrl, you should see that we have every letter except M. Ctrl-M is weird: it’s being read as 10, when we expect it to be read as 13, since it is the 13th letter of the alphabet, and Ctrl-J already produces a 10. What else produces 10? The Enter key does.
+
+It turns out that the terminal is helpfully translating any carriage returns (13, '\r') inputted by the user into newlines (10, '\n'). This can be disabled via the ICRNL flag.
+
+```go
+func rawMode() (func(), error) {
+	...
+
+	raw.Iflag &^= unix.IXON | unix.ICRNL
+	raw.Lflag &^= unix.ECHO | unix.ICANON | unix.ISIG | unix.IEXTEN
+
+	...
+}
 ```

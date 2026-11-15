@@ -17,18 +17,8 @@ func main() {
 	}
 	reader := bufio.NewReader(os.Stdin)
 
-	// for {
-	// 	s, _ := reader.ReadString('\n')
-	// 	s = strings.TrimSpace(s)
-	// 	if s == "q" {
-	// 		break
-	// 	}
-	// 	fmt.Println("Pressed:", s)
-	// }
-
 	for {
 		s, err := reader.ReadByte()
-		// _, err = reader.ReadByte()
 
 		if err == io.EOF {
 			break
@@ -53,14 +43,15 @@ func rawMode() (func(), error) {
 	}
 
 	copy := raw
-	raw.Lflag = raw.Lflag &^ (unix.ECHO | unix.ICANON)
+	raw.Iflag &^= unix.IXON | unix.ICRNL
+	raw.Lflag &^= unix.ECHO | unix.ICANON | unix.ISIG | unix.IEXTEN
 
 	if err = unix.IoctlSetTermios(unix.Stdin, unix.TCSETS, raw); err != nil {
 		return nil, fmt.Errorf("rawMode: error setting terminal flags: %w", err)
 	}
 
 	return func() {
-		if err := unix.IoctlSetTermios(unix.Stdin, unix.TCSETA, copy); err != nil {
+		if err := unix.IoctlSetTermios(unix.Stdin, unix.TCSETS, copy); err != nil {
 			fmt.Fprintf(os.Stderr, "disableRawMode: error restoring original terminal flags: %s", err)
 		}
 	}, nil
