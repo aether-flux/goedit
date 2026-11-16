@@ -226,3 +226,63 @@ func rawMode() (func(), error) {
 	...
 }
 ```
+
+## Disabling Output Processing
+
+To turn off all output processing, we disable the `Oflag` `OPOST` in a similar way we disabled `Lflag`s and `Iflag`s.
+
+This would disable the terminal from converting every `\n` to `\r\n`, so we would only notice the cursor going down in a newline, not to the left of the screen:
+
+```sh
+Pressed:  115
+             Pressed:  100
+                          Pressed:  102
+```
+
+To fix this, add `\r` before all print statements that have a `\n` character. For the line `fmt.Println("Pressed:", s)`, we can replace it with the more flexible Printf method as `fmt.Printf("Pressed: %c\r\n", s)`.
+
+## Some more flags
+
+```go
+func rawMode() (func(), error) {
+	...
+
+	raw.Oflag &^= unix.OPOST
+	raw.Iflag &^= unix.IXON | unix.ICRNL | unix.BRKINT | unix.INPCK | unix.ISTRIP
+	raw.Lflag &^= unix.ECHO | unix.ICANON | unix.ISIG | unix.IEXTEN
+	raw.Cflag |= unix.CS8
+
+	...
+}
+```
+
+- `BRKINT`: When enabled, a break condition generates a SIGINT signal (similar to pressing `Ctrl-C`)
+- `INPCK`: Parity checking, doesn't seem to apply to modern terminal emulators
+- `ISTRIP`: Causes 8th bit of each input byte to be stripped. Probably already turned off
+- `CS8`: A bit mask (not a flag), sets character size (CS) to 8 bits per byte. Its already set that way on my system
+
+## Read with timeout
+
+In `man 3 termios`, there are four cases of different values of `c_cc` values for non canonical mode. The one we are concerned with is:
+
+- `VMIN` = 0: Minimum number of characters required to be read is 0
+- `VTIME` > 0: Timeout until when `read` should wait to read characters is greater than 0
+
+This combination gives a timeout to our reader which, after waiting for `VTIME` deciseconds, will return and break the loop if no characters were pressed.
+
+You can try it out with the following code:
+
+```go
+func rawMode() (func(), error) {
+	...
+
+	raw.Cflag |= unix.CS8
+	raw.Cc[unix.VMIN] = 1
+	raw.Cc[unix.VTIME] = 1
+
+	...
+}
+```
+
+- `VMIN = 1`: Waits for our reader to read at least one byte/character.
+- `VTIME = 1`: A value of 0 would mean no timeout. Setting it as 1 lets the reader return as soon as there is a character to be read.
