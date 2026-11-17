@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 
@@ -8,16 +9,28 @@ import (
 )
 
 var globalState = struct {
+	cx, cy          int
+	srows, scols    int
+	trow            []string
+	nrows, rowoff   int
 	restoreTerminal func()
 	orig_termios    unix.Termios
 }{
+	0, 0,
+	0, 0,
+	[]string{},
+	0, 0,
 	nil,
 	unix.Termios{},
 }
 
+func BufAppend(buf *bytes.Buffer, str string) {
+	_, _ = buf.WriteString(str)
+}
+
 func safeExit(err error) {
-	fmt.Fprint(os.Stdout, "\x1b[2J")
-	fmt.Fprint(os.Stdout, "\x1b[H")
+	_, _ = fmt.Fprint(os.Stdout, "\x1b[2J")
+	_, _ = fmt.Fprint(os.Stdout, "\x1b[H")
 
 	if globalState.restoreTerminal != nil {
 		globalState.restoreTerminal()
@@ -28,26 +41,6 @@ func safeExit(err error) {
 		os.Exit(1)
 	}
 	os.Exit(0)
-}
-
-func main() {
-	disableRawMode, err := rawMode()
-	if err != nil {
-		safeExit(err)
-	}
-	globalState.restoreTerminal = disableRawMode
-	defer safeExit(nil)
-
-	kr := NewKeyReader()
-
-	for {
-		s := getTerminalSize()
-		refreshScreen(s)
-
-		if err := processKey(kr); err != nil {
-			safeExit(err)
-		}
-	}
 }
 
 func rawMode() (func(), error) {
@@ -73,4 +66,29 @@ func rawMode() (func(), error) {
 			fmt.Fprintf(os.Stderr, "disableRawMode: error restoring original terminal flags: %s\r\n", err)
 		}
 	}, nil
+}
+
+func main() {
+	disableRawMode, err := rawMode()
+	if err != nil {
+		safeExit(err)
+	}
+	globalState.restoreTerminal = disableRawMode
+	filename := ""
+	if len(os.Args) > 1 {
+		filename = os.Args[1]
+	}
+	editorOpen(filename)
+	defer safeExit(nil)
+
+	kr := NewKeyReader()
+
+	for {
+		s := getTerminalSize()
+		refreshScreen(s)
+
+		if err := processKey(kr); err != nil {
+			safeExit(err)
+		}
+	}
 }
