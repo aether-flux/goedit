@@ -52,7 +52,17 @@ func processKey(kr *KeyReader) error {
 	case ctrl('q'):
 		safeExit(nil)
 	case 'h', 'j', 'k', 'l', 'G', ctrl('g'), '0', '$':
-		moveCursor(k)
+		moveCursor(int(k))
+	}
+
+	var row string
+	if globalState.cy > globalState.nrows {
+		row = ""
+	} else {
+		row = globalState.trow[globalState.cy].str
+	}
+	if globalState.cx > len(row) {
+		globalState.cx = len(row)
 	}
 
 	return nil
@@ -70,7 +80,7 @@ func readSpecialKeys(kr *KeyReader) int {
 	}
 
 	if seq[0] == '[' {
-		if seq[1] >= '0' && seq[1] >= '9' {
+		if seq[1] >= '0' && seq[1] <= '9' {
 			if seq[2], err = kr.ReadKey(); err != nil {
 				safeExit(nil)
 			}
@@ -119,22 +129,24 @@ func readSpecialKeys(kr *KeyReader) int {
 
 func handleSpecialKeys(key int) {
 	switch key {
-	case ARROW_LEFT:
-		if globalState.cx >= 1 {
-			globalState.cx -= 1
-		}
-	case ARROW_DOWN:
-		if globalState.cy <= globalState.srows {
-			globalState.cy += 1
-		}
-	case ARROW_UP:
-		if globalState.cy >= 1 {
-			globalState.cy -= 1
-		}
-	case ARROW_RIGHT:
-		if globalState.cx <= globalState.scols {
-			globalState.cx += 1
-		}
+	// case ARROW_LEFT:
+	// 	if globalState.cx >= 1 {
+	// 		globalState.cx -= 1
+	// 	}
+	// case ARROW_DOWN:
+	// 	if globalState.cy <= globalState.nrows-1 {
+	// 		globalState.cy += 1
+	// 	}
+	// case ARROW_UP:
+	// 	if globalState.cy >= 1 {
+	// 		globalState.cy -= 1
+	// 	}
+	// case ARROW_RIGHT:
+	// 	if len(row) > 0 && globalState.cx < len(row) {
+	// 		globalState.cx += 1
+	// 	}
+	case ARROW_LEFT, ARROW_DOWN, ARROW_UP, ARROW_RIGHT:
+		moveCursor(key)
 	case PAGE_DOWN:
 		globalState.cy = globalState.srows - 1
 	case PAGE_UP:
@@ -146,27 +158,40 @@ func handleSpecialKeys(key int) {
 	}
 }
 
-func moveCursor(k byte) {
+func moveCursor(k int) {
+	var row string
+	if globalState.cy > globalState.nrows {
+		row = ""
+	} else {
+		row = globalState.trow[globalState.cy].str
+	}
+
 	switch k {
-	case 'h':
+	case 'h', ARROW_LEFT:
 		if globalState.cx >= 1 {
 			globalState.cx -= 1
+		} else if globalState.cy > 0 {
+			globalState.cy -= 1
+			globalState.cx = len(row)
 		}
-	case 'j':
-		if globalState.cy <= globalState.srows {
+	case 'j', ARROW_DOWN:
+		if globalState.cy < globalState.nrows-1 {
 			globalState.cy += 1
 		}
-	case 'k':
+	case 'k', ARROW_UP:
 		if globalState.cy >= 1 {
 			globalState.cy -= 1
 		}
-	case 'l':
-		if globalState.cx <= globalState.scols {
+	case 'l', ARROW_RIGHT:
+		if len(row) > 0 && globalState.cx < len(row) {
 			globalState.cx += 1
+		} else if len(row) > 0 && globalState.cx == len(row) {
+			globalState.cx = 0
+			globalState.cy += 1
 		}
 	case 'G':
-		globalState.cy = globalState.srows - 1
-	case ctrl('g'):
+		globalState.cy = globalState.nrows - 1
+	case int(ctrl('g')):
 		globalState.cy = 0
 	case '0':
 		globalState.cx = 0

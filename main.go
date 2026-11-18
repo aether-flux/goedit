@@ -4,21 +4,31 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"runtime/debug"
 
 	"golang.org/x/sys/unix"
 )
 
+type erow struct {
+	str    string
+	render string
+}
+
 var globalState = struct {
 	cx, cy          int
+	rx              int
 	srows, scols    int
-	trow            []string
-	nrows, rowoff   int
+	trow            []erow
+	nrows           int
+	rowoff, coloff  int
 	restoreTerminal func()
 	orig_termios    unix.Termios
 }{
 	0, 0,
+	0,
 	0, 0,
-	[]string{},
+	[]erow{},
+	0,
 	0, 0,
 	nil,
 	unix.Termios{},
@@ -74,18 +84,34 @@ func main() {
 		safeExit(err)
 	}
 	globalState.restoreTerminal = disableRawMode
+
 	filename := ""
 	if len(os.Args) > 1 {
 		filename = os.Args[1]
 	}
-	editorOpen(filename)
-	defer safeExit(nil)
 
+	defer func() {
+		_, _ = fmt.Fprint(os.Stdout, "\x1b[2J")
+		_, _ = fmt.Fprint(os.Stdout, "\x1b[H")
+
+		if r := recover(); r != nil {
+			if globalState.restoreTerminal != nil {
+				globalState.restoreTerminal()
+			}
+
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "panic: %v\r\n%s\r\n", r, debug.Stack())
+				os.Exit(1)
+			}
+		}
+	}()
+
+	// s := getTerminalSize()
+	editorOpen(filename)
 	kr := NewKeyReader()
 
 	for {
-		s := getTerminalSize()
-		refreshScreen(s)
+		refreshScreen()
 
 		if err := processKey(kr); err != nil {
 			safeExit(err)

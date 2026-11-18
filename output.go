@@ -8,6 +8,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+const tabstop = 8
+
 type Screen struct {
 	Rows int
 	Cols int
@@ -51,7 +53,13 @@ func (s *Screen) drawRows(buf *bytes.Buffer) {
 				BufAppend(buf, "~")
 			}
 		} else {
-			BufAppend(buf, globalState.trow[filerow])
+			line := renderString(globalState.trow[filerow].str)
+			start := min(globalState.coloff, len(line))
+			line = line[start:]
+			if len(line) > s.Cols {
+				line = line[:s.Cols]
+			}
+			BufAppend(buf, string(line))
 		}
 
 		BufAppend(buf, "\x1b[K")
@@ -61,7 +69,41 @@ func (s *Screen) drawRows(buf *bytes.Buffer) {
 	}
 }
 
+func renderString(line string) []rune {
+	out := make([]rune, 0, len(line))
+	for _, r := range line {
+		if r == '\t' {
+			out = append(out, ' ')
+			if len(out)%tabstop != 0 {
+				out = append(out, ' ')
+			}
+		} else {
+			out = append(out, r)
+		}
+	}
+
+	return out
+}
+
+func cxToRx(trow *erow, cx int) int {
+	rx := 0
+
+	for i := range cx {
+		if trow.str[i] == '\t' {
+			rx += (tabstop - 1) - (rx % tabstop)
+		}
+		rx += 1
+	}
+
+	return rx
+}
+
 func editorScroll() {
+	globalState.rx = 0
+	if globalState.cy < globalState.nrows {
+		globalState.rx = cxToRx(&globalState.trow[globalState.cy], globalState.cx)
+	}
+
 	if globalState.cy < globalState.rowoff {
 		globalState.rowoff = globalState.cy
 	}
@@ -69,9 +111,18 @@ func editorScroll() {
 	if globalState.cy >= globalState.rowoff+globalState.srows {
 		globalState.rowoff = globalState.cy - globalState.srows + 1
 	}
+
+	if globalState.rx < globalState.coloff {
+		globalState.coloff = globalState.rx
+	}
+
+	if globalState.rx >= globalState.coloff+globalState.scols {
+		globalState.coloff = globalState.rx - globalState.scols + 1
+	}
 }
 
-func refreshScreen(s *Screen) {
+func refreshScreen() {
+	s := getTerminalSize()
 	editorScroll()
 
 	buf := bytes.NewBufferString("")
@@ -81,8 +132,7 @@ func refreshScreen(s *Screen) {
 
 	s.drawRows(buf)
 
-	BufAppend(buf, fmt.Sprintf("\x1b[%d;%dH", (globalState.cy-globalState.rowoff)+1, globalState.cx+1))
-	// BufAppend(buf, "\x1b[H")
+	BufAppend(buf, fmt.Sprintf("\x1b[%d;%dH", (globalState.cy-globalState.rowoff)+1, (globalState.rx-globalState.coloff)+1))
 	BufAppend(buf, "\x1b[?25h")
 
 	if _, err := os.Stdout.Write(buf.Bytes()); err != nil {
