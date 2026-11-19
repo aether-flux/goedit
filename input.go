@@ -2,15 +2,19 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"os"
 )
+
+const quit_limit = 2
 
 func ctrl(c byte) byte {
 	return (c & 31)
 }
 
 const (
+	BACKSPACE  = 127
 	ARROW_LEFT = 1000 + iota
 	ARROW_RIGHT
 	ARROW_UP
@@ -36,6 +40,8 @@ func (kr *KeyReader) ReadKey() (byte, error) {
 	return kr.ReadByte()
 }
 
+var quittimes int = quit_limit - 1
+
 func processKey(kr *KeyReader) error {
 	k, err := kr.ReadKey()
 
@@ -49,10 +55,26 @@ func processKey(kr *KeyReader) error {
 	case '\x1b':
 		key := readSpecialKeys(kr)
 		handleSpecialKeys(key)
+	case BACKSPACE:
+		handleSpecialKeys(int(k))
 	case ctrl('q'):
-		safeExit(nil)
+		if globalState.dirty > 0 && quittimes > 0 {
+			msg := fmt.Sprintf("WARN: Unsaved changes, press <C-q> %d more times to quit without saving", quittimes)
+			setStatusMessage(msg)
+			quittimes -= 1
+			return nil
+		}
+		_, _ = fmt.Fprint(os.Stdout, "\x1b[2J")
+		_, _ = fmt.Fprint(os.Stdout, "\x1b[H")
+		os.Exit(0)
 	case 'h', 'j', 'k', 'l', 'G', ctrl('g'), '0', '$':
 		moveCursor(int(k))
+	case ctrl('s'):
+		editorSave()
+	// case '\r':
+	// 	TODO
+	default:
+		insertChar(k)
 	}
 
 	var row string
@@ -65,6 +87,7 @@ func processKey(kr *KeyReader) error {
 		globalState.cx = len(row)
 	}
 
+	quittimes = quit_limit - 1
 	return nil
 }
 
@@ -124,18 +147,13 @@ func readSpecialKeys(kr *KeyReader) int {
 		}
 	}
 
-	return -1
+	return '\x1b'
 }
 
 func handleSpecialKeys(key int) {
 	switch key {
 	case ARROW_LEFT, ARROW_DOWN, ARROW_UP, ARROW_RIGHT, HOME, END:
 		moveCursor(key)
-	// case PAGE_DOWN:
-	// 	globalState.cy = min(globalState.nrows, globalState.rowoff + globalState.srows - 1)
-	// 	// if globalState.cy > globalState.nrows {
-	// 	// 	globalState.cy = globalState.nrows
-	// 	// }
 	case PAGE_DOWN, PAGE_UP:
 		if key == PAGE_UP {
 			globalState.cy = globalState.rowoff
@@ -143,10 +161,16 @@ func handleSpecialKeys(key int) {
 			globalState.cy = min(globalState.nrows, globalState.rowoff+globalState.srows-1)
 		}
 
-		// times := globalState.srows
 		for times := globalState.srows; times >= 0; times -= 1 {
 			moveCursor(key)
 		}
+	case BACKSPACE:
+		delChar()
+	case DELETE:
+		moveCursor(ARROW_RIGHT)
+		delChar()
+		// case '\x1b':
+		// 	TODO
 	}
 }
 
@@ -167,7 +191,7 @@ func moveCursor(k int) {
 		}
 	case 'j', ARROW_DOWN, PAGE_DOWN:
 		if globalState.cy < globalState.nrows-1 {
-			globalState.cy += 1
+			globalState.cy++
 		}
 	case 'k', ARROW_UP, PAGE_UP:
 		if globalState.cy >= 1 {
@@ -175,10 +199,10 @@ func moveCursor(k int) {
 		}
 	case 'l', ARROW_RIGHT:
 		if onRow && globalState.cx < len(row) {
-			globalState.cx += 1
+			globalState.cx++
 		} else if onRow && globalState.cx == len(row) {
 			globalState.cx = 0
-			globalState.cy += 1
+			globalState.cy++
 		}
 	case 'G':
 		globalState.cy = globalState.nrows - 1

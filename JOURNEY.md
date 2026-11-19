@@ -1,5 +1,4 @@
 # 1. Setup
-
 # 2. Entering Raw Mode (Reading user keypresses)
 
 By default, the terminal opens in canonical (also called cooked) mode. To make it truly raw mode, we would need much more flags.

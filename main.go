@@ -11,8 +11,8 @@ import (
 )
 
 type erow struct {
-	str string
-	// render string
+	str    string
+	render string
 }
 
 var globalState = struct {
@@ -20,6 +20,7 @@ var globalState = struct {
 	rx              int
 	srows, scols    int
 	trow            []erow
+	dirty           int
 	filename        string
 	statusmsg       string
 	statustime      time.Time
@@ -32,8 +33,9 @@ var globalState = struct {
 	0,
 	0, 0,
 	[]erow{},
+	0,
 	"",
-	"HELP: CTRL-Q = Quit",
+	"<C-q> Quit | <C-s> Save",
 	time.Now(),
 	0,
 	0, 0,

@@ -30,7 +30,7 @@ func getTerminalSize() *Screen {
 func NewScreen(rows, cols int) *Screen {
 	globalState.srows = rows - 2
 	globalState.scols = cols
-	return &Screen{rows, cols}
+	return &Screen{rows - 2, cols}
 }
 
 func (s *Screen) drawRows(buf *bytes.Buffer) {
@@ -54,7 +54,8 @@ func (s *Screen) drawRows(buf *bytes.Buffer) {
 				BufAppend(buf, "~")
 			}
 		} else {
-			line := renderString(globalState.trow[filerow].str)
+			// line := renderString(globalState.trow[filerow])
+			line := []byte(globalState.trow[filerow].render)
 			start := min(globalState.coloff, len(line))
 			line = line[start:]
 			if len(line) > s.Cols {
@@ -68,20 +69,21 @@ func (s *Screen) drawRows(buf *bytes.Buffer) {
 	}
 }
 
-func renderString(line string) []rune {
-	out := make([]rune, 0, len(line))
-	for _, r := range line {
-		if r == '\t' {
-			out = append(out, ' ')
-			for len(out)%tabstop != 0 {
-				out = append(out, ' ')
+func updateRow(trow *erow) {
+	line := trow.str
+	res := make([]byte, 0, len(line))
+	for i := 0; i < len(line); i++ {
+		if line[i] == '\t' {
+			res = append(res, ' ')
+			for len(res)%tabstop != 0 {
+				res = append(res, ' ')
 			}
 		} else {
-			out = append(out, r)
+			res = append(res, line[i])
 		}
 	}
 
-	return out
+	trow.render = string(res)
 }
 
 func cxToRx(trow *erow, cx int) int {
@@ -91,7 +93,7 @@ func cxToRx(trow *erow, cx int) int {
 		if trow.str[i] == '\t' {
 			rx += (tabstop - 1) - (rx % tabstop)
 		}
-		rx += 1
+		rx++
 	}
 
 	return rx
@@ -105,7 +107,12 @@ func (s *Screen) drawStatusBar(buf *bytes.Buffer) {
 		filename = globalState.filename
 	}
 
-	status := fmt.Sprintf("%.20s - %d lines", filename, globalState.nrows)
+	modified := ""
+	if globalState.dirty != 0 {
+		modified = "(modified)"
+	}
+
+	status := fmt.Sprintf("%.20s - %d lines %s", filename, globalState.nrows, modified)
 	l := len(status)
 	start := min(globalState.coloff, l)
 	status = status[start:]
@@ -115,9 +122,9 @@ func (s *Screen) drawStatusBar(buf *bytes.Buffer) {
 	BufAppend(buf, status)
 
 	// perc := ((globalState.cy + 1) / (globalState.nrows - 2)) * 100
-	lineInfo := fmt.Sprintf("%d / %d", globalState.cy+1, globalState.nrows-2)
+	lineInfo := fmt.Sprintf("%d / %d", globalState.cy+1, globalState.nrows)
 
-	for ; l < globalState.scols; l += 1 {
+	for ; l < globalState.scols; l++ {
 		if globalState.scols-l == len(lineInfo) {
 			BufAppend(buf, lineInfo)
 			break
@@ -132,14 +139,19 @@ func (s *Screen) drawStatusBar(buf *bytes.Buffer) {
 
 func (s *Screen) drawMessageBar(buf *bytes.Buffer) {
 	BufAppend(buf, "\x1b[K")
-	if time.Until(globalState.statustime).Seconds() < 5.00 {
+	if time.Since(globalState.statustime) < 5*time.Second {
 		BufAppend(buf, globalState.statusmsg)
 	}
 }
 
+func setStatusMessage(msg string) {
+	globalState.statusmsg = msg
+	globalState.statustime = time.Now()
+}
+
 func editorScroll() {
 	globalState.rx = 0
-	if globalState.cy < globalState.nrows {
+	if globalState.cy < globalState.nrows-2 {
 		globalState.rx = cxToRx(&globalState.trow[globalState.cy], globalState.cx)
 	}
 
