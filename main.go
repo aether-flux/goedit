@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
 
 type erow struct {
-	str    string
-	render string
+	str string
+	// render string
 }
 
 var globalState = struct {
@@ -19,6 +20,9 @@ var globalState = struct {
 	rx              int
 	srows, scols    int
 	trow            []erow
+	filename        string
+	statusmsg       string
+	statustime      time.Time
 	nrows           int
 	rowoff, coloff  int
 	restoreTerminal func()
@@ -28,6 +32,9 @@ var globalState = struct {
 	0,
 	0, 0,
 	[]erow{},
+	"",
+	"HELP: CTRL-Q = Quit",
+	time.Now(),
 	0,
 	0, 0,
 	nil,
@@ -39,7 +46,7 @@ func BufAppend(buf *bytes.Buffer, str string) {
 }
 
 func safeExit(err error) {
-	_, _ = fmt.Fprint(os.Stdout, "\x1b[2J")
+	// _, _ = fmt.Fprint(os.Stdout, "\x1b[2J")
 	_, _ = fmt.Fprint(os.Stdout, "\x1b[H")
 
 	if globalState.restoreTerminal != nil {
@@ -71,7 +78,10 @@ func rawMode() (func(), error) {
 		return nil, fmt.Errorf("rawMode: error setting terminal flags: %w", err)
 	}
 
+	fmt.Fprint(os.Stdout, "\x1b[?7l")
+
 	return func() {
+		fmt.Fprint(os.Stdout, "\x1b[?7h")
 		if err := unix.IoctlSetTermios(unix.Stdin, unix.TCSETS, &globalState.orig_termios); err != nil {
 			fmt.Fprintf(os.Stderr, "disableRawMode: error restoring original terminal flags: %s\r\n", err)
 		}
@@ -91,7 +101,6 @@ func main() {
 	}
 
 	defer func() {
-		_, _ = fmt.Fprint(os.Stdout, "\x1b[2J")
 		_, _ = fmt.Fprint(os.Stdout, "\x1b[H")
 
 		if r := recover(); r != nil {
@@ -99,14 +108,11 @@ func main() {
 				globalState.restoreTerminal()
 			}
 
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "panic: %v\r\n%s\r\n", r, debug.Stack())
-				os.Exit(1)
-			}
+			fmt.Fprintf(os.Stderr, "panic: %v\r\n%s\r\n", r, debug.Stack())
+			os.Exit(1)
 		}
 	}()
 
-	// s := getTerminalSize()
 	editorOpen(filename)
 	kr := NewKeyReader()
 

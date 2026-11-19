@@ -56,7 +56,7 @@ func processKey(kr *KeyReader) error {
 	}
 
 	var row string
-	if globalState.cy > globalState.nrows {
+	if globalState.cy >= globalState.nrows {
 		row = ""
 	} else {
 		row = globalState.trow[globalState.cy].str
@@ -129,40 +129,31 @@ func readSpecialKeys(kr *KeyReader) int {
 
 func handleSpecialKeys(key int) {
 	switch key {
-	// case ARROW_LEFT:
-	// 	if globalState.cx >= 1 {
-	// 		globalState.cx -= 1
-	// 	}
-	// case ARROW_DOWN:
-	// 	if globalState.cy <= globalState.nrows-1 {
-	// 		globalState.cy += 1
-	// 	}
-	// case ARROW_UP:
-	// 	if globalState.cy >= 1 {
-	// 		globalState.cy -= 1
-	// 	}
-	// case ARROW_RIGHT:
-	// 	if len(row) > 0 && globalState.cx < len(row) {
-	// 		globalState.cx += 1
-	// 	}
-	case ARROW_LEFT, ARROW_DOWN, ARROW_UP, ARROW_RIGHT:
+	case ARROW_LEFT, ARROW_DOWN, ARROW_UP, ARROW_RIGHT, HOME, END:
 		moveCursor(key)
-	case PAGE_DOWN:
-		globalState.cy = globalState.srows - 1
-	case PAGE_UP:
-		globalState.cy = 0
-	case HOME:
-		globalState.cx = 0
-	case END:
-		globalState.cx = globalState.scols - 1
+	// case PAGE_DOWN:
+	// 	globalState.cy = min(globalState.nrows, globalState.rowoff + globalState.srows - 1)
+	// 	// if globalState.cy > globalState.nrows {
+	// 	// 	globalState.cy = globalState.nrows
+	// 	// }
+	case PAGE_DOWN, PAGE_UP:
+		if key == PAGE_UP {
+			globalState.cy = globalState.rowoff
+		} else if key == PAGE_DOWN {
+			globalState.cy = min(globalState.nrows, globalState.rowoff+globalState.srows-1)
+		}
+
+		// times := globalState.srows
+		for times := globalState.srows; times >= 0; times -= 1 {
+			moveCursor(key)
+		}
 	}
 }
 
 func moveCursor(k int) {
-	var row string
-	if globalState.cy > globalState.nrows {
-		row = ""
-	} else {
+	onRow := globalState.cy < globalState.nrows
+	row := ""
+	if onRow {
 		row = globalState.trow[globalState.cy].str
 	}
 
@@ -172,20 +163,20 @@ func moveCursor(k int) {
 			globalState.cx -= 1
 		} else if globalState.cy > 0 {
 			globalState.cy -= 1
-			globalState.cx = len(row)
+			globalState.cx = len(globalState.trow[globalState.cy].str)
 		}
-	case 'j', ARROW_DOWN:
+	case 'j', ARROW_DOWN, PAGE_DOWN:
 		if globalState.cy < globalState.nrows-1 {
 			globalState.cy += 1
 		}
-	case 'k', ARROW_UP:
+	case 'k', ARROW_UP, PAGE_UP:
 		if globalState.cy >= 1 {
 			globalState.cy -= 1
 		}
 	case 'l', ARROW_RIGHT:
-		if len(row) > 0 && globalState.cx < len(row) {
+		if onRow && globalState.cx < len(row) {
 			globalState.cx += 1
-		} else if len(row) > 0 && globalState.cx == len(row) {
+		} else if onRow && globalState.cx == len(row) {
 			globalState.cx = 0
 			globalState.cy += 1
 		}
@@ -193,9 +184,13 @@ func moveCursor(k int) {
 		globalState.cy = globalState.nrows - 1
 	case int(ctrl('g')):
 		globalState.cy = 0
-	case '0':
+	case 'L':
+		globalState.cy = min(globalState.nrows, globalState.rowoff+globalState.srows-1)
+	case 'H':
+		globalState.cy = min(globalState.nrows, globalState.rowoff)
+	case '0', HOME:
 		globalState.cx = 0
-	case '$':
-		globalState.cx = globalState.scols - 1
+	case '$', END:
+		globalState.cx = len(row)
 	}
 }

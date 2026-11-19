@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -27,7 +28,7 @@ func getTerminalSize() *Screen {
 }
 
 func NewScreen(rows, cols int) *Screen {
-	globalState.srows = rows
+	globalState.srows = rows - 2
 	globalState.scols = cols
 	return &Screen{rows, cols}
 }
@@ -63,9 +64,7 @@ func (s *Screen) drawRows(buf *bytes.Buffer) {
 		}
 
 		BufAppend(buf, "\x1b[K")
-		if y < s.Rows-1 {
-			BufAppend(buf, "\r\n")
-		}
+		BufAppend(buf, "\r\n")
 	}
 }
 
@@ -74,7 +73,7 @@ func renderString(line string) []rune {
 	for _, r := range line {
 		if r == '\t' {
 			out = append(out, ' ')
-			if len(out)%tabstop != 0 {
+			for len(out)%tabstop != 0 {
 				out = append(out, ' ')
 			}
 		} else {
@@ -96,6 +95,46 @@ func cxToRx(trow *erow, cx int) int {
 	}
 
 	return rx
+}
+
+func (s *Screen) drawStatusBar(buf *bytes.Buffer) {
+	BufAppend(buf, "\x1b[7m")
+
+	filename := "[Untitled]"
+	if globalState.filename != "" {
+		filename = globalState.filename
+	}
+
+	status := fmt.Sprintf("%.20s - %d lines", filename, globalState.nrows)
+	l := len(status)
+	start := min(globalState.coloff, l)
+	status = status[start:]
+	if len(status) > s.Cols {
+		status = status[:s.Cols]
+	}
+	BufAppend(buf, status)
+
+	// perc := ((globalState.cy + 1) / (globalState.nrows - 2)) * 100
+	lineInfo := fmt.Sprintf("%d / %d", globalState.cy+1, globalState.nrows-2)
+
+	for ; l < globalState.scols; l += 1 {
+		if globalState.scols-l == len(lineInfo) {
+			BufAppend(buf, lineInfo)
+			break
+		} else {
+			BufAppend(buf, " ")
+		}
+	}
+
+	BufAppend(buf, "\x1b[m")
+	BufAppend(buf, "\r\n")
+}
+
+func (s *Screen) drawMessageBar(buf *bytes.Buffer) {
+	BufAppend(buf, "\x1b[K")
+	if time.Until(globalState.statustime).Seconds() < 5.00 {
+		BufAppend(buf, globalState.statusmsg)
+	}
 }
 
 func editorScroll() {
@@ -131,6 +170,8 @@ func refreshScreen() {
 	BufAppend(buf, "\x1b[H")
 
 	s.drawRows(buf)
+	s.drawStatusBar(buf)
+	s.drawMessageBar(buf)
 
 	BufAppend(buf, fmt.Sprintf("\x1b[%d;%dH", (globalState.cy-globalState.rowoff)+1, (globalState.rx-globalState.coloff)+1))
 	BufAppend(buf, "\x1b[?25h")
