@@ -42,6 +42,37 @@ func (kr *KeyReader) ReadKey() (byte, error) {
 
 var quittimes int = quit_limit - 1
 
+func editorPrompt(prompt string) string {
+	var out []byte
+	kr := NewKeyReader()
+
+	for {
+		setStatusMessage(fmt.Sprintf(prompt, string(out)))
+		refreshScreen()
+
+		c, err := kr.ReadKey()
+		if err != nil {
+			safeExit(err)
+		}
+
+		if c == '\r' {
+			if len(out) > 0 {
+				setStatusMessage("")
+				return string(out)
+			}
+		} else if c == BACKSPACE {
+			if len(out) > 0 {
+				out = out[:len(out)-1]
+			}
+		} else if c == '\x1b' {
+			setStatusMessage("")
+			return ""
+		} else if c < 128 {
+			out = append(out, c)
+		}
+	}
+}
+
 func processKey(kr *KeyReader) error {
 	k, err := kr.ReadKey()
 
@@ -65,14 +96,14 @@ func processKey(kr *KeyReader) error {
 			return nil
 		}
 		_, _ = fmt.Fprint(os.Stdout, "\x1b[2J")
-		_, _ = fmt.Fprint(os.Stdout, "\x1b[H")
-		os.Exit(0)
-	case 'h', 'j', 'k', 'l', 'G', ctrl('g'), '0', '$':
-		moveCursor(int(k))
+		// _, _ = fmt.Fprint(os.Stdout, "\x1b[H")
+		safeExit(nil)
+	// case 'h', 'j', 'k', 'l', 'G', ctrl('g'), '0', '$':
+	// 	moveCursor(int(k))
 	case ctrl('s'):
 		editorSave()
-	// case '\r':
-	// 	TODO
+	case '\r':
+		insertNewline()
 	default:
 		insertChar(k)
 	}

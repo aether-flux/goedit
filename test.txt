@@ -1,4 +1,0 @@
-Hello, world
-This is a text file
-With contents on different lines
-Is it working?

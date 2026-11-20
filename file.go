@@ -29,7 +29,7 @@ func editorOpen(filename string) {
 			line = strings.TrimRight(line, "\r")
 			appendRow(line)
 		}
-		globalState.nrows = len(lines)
+		// globalState.nrows = len(lines)
 	}
 
 	globalState.dirty = 0
@@ -40,7 +40,11 @@ func editorSave() {
 	globalState.dirty = 0
 
 	if globalState.filename == "" {
-		return
+		globalState.filename = editorPrompt("Save as: %s")
+		if globalState.filename == "" {
+			setStatusMessage("Save aborted")
+			return
+		}
 	}
 
 	fd, err := os.OpenFile(globalState.filename, os.O_RDWR|os.O_CREATE, 0o644)
@@ -89,6 +93,7 @@ func appendRow(line string) {
 	globalState.trow = append(globalState.trow, erow{str: line})
 	pos := len(globalState.trow)
 	updateRow(&globalState.trow[pos-1])
+	globalState.nrows++
 	globalState.dirty++
 }
 
@@ -97,8 +102,9 @@ func insertRow(line string, pos int) {
 		return
 	}
 
-	globalState.trow = append(globalState.trow, erow{str: line})
+	globalState.trow = slices.Insert(globalState.trow, pos, erow{str: line})
 	updateRow(&globalState.trow[pos])
+	globalState.nrows++
 	globalState.dirty++
 }
 
@@ -154,14 +160,20 @@ func insertChar(c byte) {
 	globalState.cx++
 }
 
-// func insertNewline() {
-// 	if globalState.cx == 0 {
-// 		insertRow("", 0)
-// 	} else {
-// 		row := globalState.trow[globalState.cy]
-// 		insertRow(, globalState.cy+1)
-// 	}
-// }
+func insertNewline() {
+	if globalState.cx == 0 {
+		insertRow("", globalState.cy)
+	} else {
+		row := &globalState.trow[globalState.cy]
+		insertRow(row.str[globalState.cx:], globalState.cy+1)
+		row = &globalState.trow[globalState.cy]
+		row.str = row.str[:globalState.cx]
+		updateRow(row)
+	}
+
+	globalState.cy++
+	globalState.cx = 0
+}
 
 func delChar() {
 	if globalState.cy == globalState.nrows {

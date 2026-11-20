@@ -151,7 +151,7 @@ func setStatusMessage(msg string) {
 
 func editorScroll() {
 	globalState.rx = 0
-	if globalState.cy < globalState.nrows-2 {
+	if globalState.cy < globalState.nrows {
 		globalState.rx = cxToRx(&globalState.trow[globalState.cy], globalState.cx)
 	}
 

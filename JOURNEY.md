@@ -1,4 +1,5 @@
 # 1. Setup
+
 # 2. Entering Raw Mode (Reading user keypresses)
 
 By default, the terminal opens in canonical (also called cooked) mode. To make it truly raw mode, we would need much more flags.
@@ -283,5 +284,3 @@ func rawMode() (func(), error) {
 }
 ```
 
-- `VMIN = 1`: Waits for our reader to read at least one byte/character.
-- `VTIME = 1`: A value of 0 would mean no timeout. Setting it as 1 lets the reader return as soon as there is a character to be read.
