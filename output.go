@@ -99,6 +99,24 @@ func cxToRx(trow *erow, cx int) int {
 	return rx
 }
 
+func rxToCx(trow *erow, rx int) int {
+	cur_rx := 0
+	var cx int
+
+	for cx = range len(trow.str) {
+		if trow.str[cx] == '\t' {
+			cur_rx += (tabstop - 1) - (cur_rx % tabstop)
+		}
+		cur_rx++
+
+		if cur_rx > rx {
+			return cx
+		}
+	}
+
+	return cx
+}
+
 func (s *Screen) drawStatusBar(buf *bytes.Buffer) {
 	BufAppend(buf, "\x1b[7m")
 

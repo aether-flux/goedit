@@ -43,6 +43,8 @@ var globalState = struct {
 	unix.Termios{},
 }
 
+var kr = NewKeyReader()
+
 func BufAppend(buf *bytes.Buffer, str string) {
 	_, _ = buf.WriteString(str)
 }
@@ -116,7 +118,7 @@ func main() {
 	}()
 
 	editorOpen(filename)
-	kr := NewKeyReader()
+	// kr := NewKeyReader()
 
 	for {
 		refreshScreen()
