@@ -9,7 +9,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const tabstop = 8
+const (
+	tabstop      = 8
+	colorDefault = -1
+	colorNumber  = 31
+)
 
 type Screen struct {
 	Rows int
@@ -54,18 +58,40 @@ func (s *Screen) drawRows(buf *bytes.Buffer) {
 				BufAppend(buf, "~")
 			}
 		} else {
-			// line := renderString(globalState.trow[filerow])
 			line := []byte(globalState.trow[filerow].render)
 			start := min(globalState.coloff, len(line))
 			line = line[start:]
 			if len(line) > s.Cols {
 				line = line[:s.Cols]
 			}
-			BufAppend(buf, string(line))
+			// BufAppend(buf, string(line))
+			highlightedAppend(buf, line)
 		}
 
 		BufAppend(buf, "\x1b[K")
 		BufAppend(buf, "\r\n")
+	}
+}
+
+func highlightedAppend(buf *bytes.Buffer, line []byte) {
+	cur := colorDefault
+
+	for _, ch := range line {
+		if ch >= '0' && ch <= '9' {
+			if cur != colorNumber {
+				buf.WriteString("\x1b[31m")
+				cur = colorNumber
+			}
+		} else if cur != colorDefault {
+			buf.WriteString("\x1b[39m")
+			cur = colorDefault
+		}
+
+		buf.WriteByte(ch)
+	}
+
+	if cur != colorDefault {
+		buf.WriteString("\x1b[39m")
 	}
 }
 
@@ -139,7 +165,6 @@ func (s *Screen) drawStatusBar(buf *bytes.Buffer) {
 	}
 	BufAppend(buf, status)
 
-	// perc := ((globalState.cy + 1) / (globalState.nrows - 2)) * 100
 	lineInfo := fmt.Sprintf("%d / %d", globalState.cy+1, globalState.nrows)
 
 	for ; l < globalState.scols; l++ {

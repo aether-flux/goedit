@@ -27,25 +27,6 @@ const (
 	DELETE
 )
 
-// type KeyReader struct {
-// 	*bufio.Reader
-// }
-//
-// func NewKeyReader() *KeyReader {
-// 	return &KeyReader{
-// 		bufio.NewReader(os.Stdin),
-// 	}
-// }
-//
-// func (kr *KeyReader) next() (byte, bool) {
-// 	if kr.Buffered() == 0 {
-// 		return 0, false
-// 	}
-//
-// 	b, err := kr.ReadByte()
-// 	return b, err == nil
-// }
-
 type KeyReader struct {
 	ch chan byte
 }
@@ -164,7 +145,6 @@ var quittimes int = quit_limit - 1
 
 func editorPrompt(prompt string, cb func(out string, c int)) string {
 	var out []byte
-	// kr := NewKeyReader()
 
 	for {
 		setStatusMessage(fmt.Sprintf(prompt, string(out)))
@@ -253,65 +233,6 @@ func processKey(kr *KeyReader) error {
 	quittimes = quit_limit - 1
 	return nil
 }
-
-// func readSpecialKeys(kr *KeyReader) int {
-// 	var seq [3]byte
-// 	var err error
-//
-// 	if seq[0], err = kr.ReadKey(); err != nil {
-// 		safeExit(nil)
-// 	}
-// 	if seq[1], err = kr.ReadKey(); err != nil {
-// 		safeExit(nil)
-// 	}
-//
-// 	if seq[0] == '[' {
-// 		if seq[1] >= '0' && seq[1] <= '9' {
-// 			if seq[2], err = kr.ReadKey(); err != nil {
-// 				safeExit(nil)
-// 			}
-//
-// 			if seq[2] == '~' {
-// 				switch seq[1] {
-// 				case '5':
-// 					return PAGE_UP
-// 				case '6':
-// 					return PAGE_DOWN
-// 				case '3':
-// 					return DELETE
-// 				case '1', '7':
-// 					return HOME
-// 				case '4', '8':
-// 					return END
-// 				}
-// 			}
-// 		} else {
-// 			switch seq[1] {
-// 			case 'A':
-// 				return ARROW_UP
-// 			case 'B':
-// 				return ARROW_DOWN
-// 			case 'C':
-// 				return ARROW_RIGHT
-// 			case 'D':
-// 				return ARROW_LEFT
-// 			case 'H':
-// 				return HOME
-// 			case 'F':
-// 				return END
-// 			}
-// 		}
-// 	} else if seq[0] == 'O' {
-// 		switch seq[1] {
-// 		case 'H':
-// 			return HOME
-// 		case 'F':
-// 			return END
-// 		}
-// 	}
-//
-// 	return '\x1b'
-// }
 
 func handleSpecialKeys(key int) {
 	switch key {

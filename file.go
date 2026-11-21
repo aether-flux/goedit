@@ -35,7 +35,6 @@ func editorOpen(filename string) {
 			line = strings.TrimRight(line, "\r")
 			appendRow(line)
 		}
-		// globalState.nrows = len(lines)
 	}
 
 	globalState.dirty = 0

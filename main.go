@@ -50,7 +50,6 @@ func BufAppend(buf *bytes.Buffer, str string) {
 }
 
 func safeExit(err error) {
-	// _, _ = fmt.Fprint(os.Stdout, "\x1b[2J")
 	_, _ = fmt.Fprint(os.Stdout, "\x1b[H")
 
 	if globalState.restoreTerminal != nil {
@@ -118,7 +117,6 @@ func main() {
 	}()
 
 	editorOpen(filename)
-	// kr := NewKeyReader()
 
 	for {
 		refreshScreen()
